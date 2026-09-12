@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 
 #[Fillable([
     'reference',
+    'submission_token',
     'product_id',
     'product_name',
     'unit_price',

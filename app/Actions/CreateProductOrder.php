@@ -22,10 +22,19 @@ class CreateProductOrder
      *
      * @param  array{customer_name: string, customer_email: string, customer_phone: string, customer_note?: string|null, coupon_code?: string|null}  $attributes
      */
-    public function handle(Product $product, int $quantity, array $attributes): Order
+    public function handle(Product $product, int $quantity, string $submissionToken, array $attributes): Order
     {
         try {
-            return DB::transaction(function () use ($attributes, $product, $quantity): Order {
+            return DB::transaction(function () use ($attributes, $product, $quantity, $submissionToken): Order {
+                $existingOrder = Order::query()
+                    ->where('submission_token', $submissionToken)
+                    ->lockForUpdate()
+                    ->first();
+
+                if ($existingOrder !== null) {
+                    return $existingOrder;
+                }
+
                 $coupon = $this->findAvailableCoupon(
                     $attributes['coupon_code'] ?? null,
                     $product,
@@ -35,6 +44,7 @@ class CreateProductOrder
 
                 $order = Order::create([
                     'reference' => (string) Str::uuid(),
+                    'submission_token' => $submissionToken,
                     'product_id' => $product->id,
                     'product_name' => $product->name,
                     'unit_price' => $product->price,
@@ -61,6 +71,12 @@ class CreateProductOrder
                 return $order;
             });
         } catch (QueryException $exception) {
+            if ($this->isOrderSubmissionConflict($exception)) {
+                return Order::query()
+                    ->where('submission_token', $submissionToken)
+                    ->firstOrFail();
+            }
+
             if ($this->isCouponRedemptionConflict($exception)) {
                 throw ValidationException::withMessages([
                     'coupon_code' => 'Kupon ini telah digunakan dengan e-mel ini.',
@@ -127,5 +143,16 @@ class CreateProductOrder
 
         return str_contains($message, 'unique')
             && str_contains($message, 'coupon_redemptions');
+    }
+
+    /**
+     * Determine whether a query exception is the unique submission token constraint.
+     */
+    private function isOrderSubmissionConflict(QueryException $exception): bool
+    {
+        $message = Str::lower($exception->getMessage());
+
+        return str_contains($message, 'unique')
+            && str_contains($message, 'orders.submission_token');
     }
 }

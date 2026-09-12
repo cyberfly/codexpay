@@ -29,10 +29,13 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->configureDefaults();
 
-        RateLimiter::for('order-submission', function (Request $request): Limit {
+        RateLimiter::for('order-submission', function (Request $request): array {
             $email = $request->input('customer_email');
 
-            return Limit::perMinute(5)->by((is_string($email) ? Str::lower($email) : '').'|'.$request->ip());
+            return [
+                Limit::perMinute(10)->by('order-ip:'.$request->ip()),
+                Limit::perMinute(5)->by('order-email:'.(is_string($email) ? Str::lower($email) : '').'|'.$request->ip()),
+            ];
         });
 
         RateLimiter::for('coupon-preview', function (Request $request): Limit {

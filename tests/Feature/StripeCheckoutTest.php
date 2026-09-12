@@ -5,6 +5,7 @@ use App\Models\Coupon;
 use App\Models\CouponRedemption;
 use App\Models\Order;
 use App\Models\Product;
+use App\Models\User;
 use App\OrderStatus;
 use App\PaymentStatus;
 use App\Support\StripeCheckout;
@@ -63,6 +64,7 @@ test('redirects a valid product order to a Stripe Checkout Session', function ()
         'customer_email' => 'aina@example.com',
         'customer_phone' => '0123456789',
         'quantity' => 1,
+        'submission_token' => fake()->uuid(),
     ]);
 
     $response->assertRedirect('https://checkout.stripe.test/c/pay/cs_test_123');
@@ -75,18 +77,20 @@ test('redirects a valid product order to a Stripe Checkout Session', function ()
 test('removes a pending order and coupon reservation when Checkout cannot be created', function () {
     $product = Product::factory()->create();
     $coupon = Coupon::factory()->create(['code' => 'SAVE10']);
+    $user = User::factory()->create(['email' => 'aina@example.com']);
     mock(StripeCheckout::class)
         ->shouldReceive('createCheckoutSession')
         ->once()
         ->andThrow(new StripeCheckoutException('Stripe is unavailable.'));
 
-    $response = $this->from(route('products.show', $product))
+    $response = $this->actingAs($user)->from(route('products.show', $product))
         ->post(route('products.orders.store', $product), [
             'customer_name' => 'Aina Ahmad',
             'customer_email' => 'aina@example.com',
             'customer_phone' => '0123456789',
             'quantity' => 1,
             'coupon_code' => $coupon->code,
+            'submission_token' => fake()->uuid(),
         ]);
 
     $response

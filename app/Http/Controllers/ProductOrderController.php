@@ -35,26 +35,31 @@ class ProductOrderController extends Controller
     ): RedirectResponse {
         abort_unless($product->is_published, 404);
 
+        $couponCode = trim($request->string('coupon_code')->toString());
+
         $order = $createProductOrder->handle(
             $product,
             $request->integer('quantity'),
+            $request->string('submission_token')->toString(),
             [
                 'customer_name' => $request->string('customer_name')->toString(),
-                'customer_email' => $request->string('customer_email')->toString(),
+                'customer_email' => $couponCode === ''
+                    ? $request->string('customer_email')->toString()
+                    : $request->user()->email,
                 'customer_phone' => $request->string('customer_phone')->toString(),
                 'customer_note' => $request->filled('customer_note')
                     ? $request->string('customer_note')->toString()
                     : null,
-                'coupon_code' => $request->filled('coupon_code')
-                    ? $request->string('coupon_code')->toString()
-                    : null,
+                'coupon_code' => $couponCode === '' ? null : $couponCode,
             ],
         );
 
         try {
             $checkoutUrl = $stripeCheckout->createCheckoutSession($order);
         } catch (StripeCheckoutException $exception) {
-            $order->delete();
+            if ($order->wasRecentlyCreated) {
+                $order->delete();
+            }
 
             report($exception);
 
@@ -63,19 +68,21 @@ class ProductOrderController extends Controller
                 ->withErrors(['payment' => 'Pembayaran tidak dapat dimulakan. Sila cuba lagi.']);
         }
 
-        try {
-            Mail::to($order->customer_email)->send(new OrderSubmitted($order));
-        } catch (Throwable $exception) {
-            report($exception);
-        }
-
-        $administrators = User::query()->where('is_admin', true)->get();
-
-        foreach ($administrators as $administrator) {
+        if ($order->wasRecentlyCreated) {
             try {
-                Mail::to($administrator)->send(new AdminOrderSubmitted($order));
+                Mail::to($order->customer_email)->send(new OrderSubmitted($order));
             } catch (Throwable $exception) {
                 report($exception);
+            }
+
+            $administrators = User::query()->where('is_admin', true)->get();
+
+            foreach ($administrators as $administrator) {
+                try {
+                    Mail::to($administrator)->send(new AdminOrderSubmitted($order));
+                } catch (Throwable $exception) {
+                    report($exception);
+                }
             }
         }
 

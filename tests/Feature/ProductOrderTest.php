@@ -46,6 +46,7 @@ test('creates a direct guest order for a published product', function () {
         'customer_phone' => '0123456789',
         'quantity' => 2,
         'customer_note' => 'Sila hubungi melalui e-mel.',
+        'submission_token' => fake()->uuid(),
     ]);
 
     $order = Order::query()->firstOrFail();
@@ -83,15 +84,17 @@ test('applies a percentage coupon and records its redemption', function () {
         'discount_type' => DiscountType::Percentage,
         'discount_value' => '10.00',
     ]);
+    $user = User::factory()->create(['email' => 'aina@example.com']);
 
     fakeStripeCheckout();
 
-    $response = $this->post(route('products.orders.store', $product), [
+    $response = $this->actingAs($user)->post(route('products.orders.store', $product), [
         'customer_name' => 'Aina Ahmad',
         'customer_email' => 'Aina@Example.com',
         'customer_phone' => '0123456789',
         'quantity' => 2,
         'coupon_code' => 'save10',
+        'submission_token' => fake()->uuid(),
     ]);
 
     $order = Order::query()->firstOrFail();
@@ -160,15 +163,17 @@ test('caps a fixed coupon discount at the order subtotal', function () {
         'discount_type' => DiscountType::FixedAmount,
         'discount_value' => '50.00',
     ]);
+    $user = User::factory()->create(['email' => 'aina@example.com']);
 
     fakeStripeCheckout();
 
-    $this->post(route('products.orders.store', $product), [
+    $this->actingAs($user)->post(route('products.orders.store', $product), [
         'customer_name' => 'Aina Ahmad',
         'customer_email' => 'aina@example.com',
         'customer_phone' => '0123456789',
         'quantity' => 1,
         'coupon_code' => 'rm50',
+        'submission_token' => fake()->uuid(),
     ])->assertRedirect();
 
     $order = Order::query()->firstOrFail();
@@ -187,15 +192,17 @@ test('rejects an inactive, expired, or product-ineligible coupon', function () {
         'applies_to_all_products' => false,
     ]);
     $limitedCoupon->products()->attach($otherProduct);
+    $user = User::factory()->create(['email' => 'aina@example.com']);
 
     foreach ([$inactiveCoupon, $expiredCoupon, $limitedCoupon] as $coupon) {
-        $this->from(route('products.show', $product))
+        $this->actingAs($user)->from(route('products.show', $product))
             ->post(route('products.orders.store', $product), [
                 'customer_name' => 'Aina Ahmad',
-                'customer_email' => fake()->safeEmail(),
+                'customer_email' => $user->email,
                 'customer_phone' => '0123456789',
                 'quantity' => 1,
                 'coupon_code' => $coupon->code,
+                'submission_token' => fake()->uuid(),
             ])
             ->assertRedirect(route('products.show', $product))
             ->assertSessionHasErrors('coupon_code');
@@ -207,27 +214,35 @@ test('rejects an inactive, expired, or product-ineligible coupon', function () {
 test('locks a coupon to an email after its order is paid', function () {
     $product = Product::factory()->create();
     $coupon = Coupon::factory()->create(['code' => 'ONEEMAIL']);
+    $user = User::factory()->create(['email' => 'aina@example.com']);
     $payload = [
         'customer_name' => 'Aina Ahmad',
         'customer_email' => 'aina@example.com',
         'customer_phone' => '0123456789',
         'quantity' => 1,
         'coupon_code' => $coupon->code,
+        'submission_token' => fake()->uuid(),
     ];
 
     fakeStripeCheckout();
 
-    $this->post(route('products.orders.store', $product), $payload)->assertRedirect();
+    $this->actingAs($user)->post(route('products.orders.store', $product), $payload)->assertRedirect();
     Order::query()->firstOrFail()->update(['payment_status' => PaymentStatus::Paid]);
 
-    $this->from(route('products.show', $product))
-        ->post(route('products.orders.store', $product), $payload)
+    $this->actingAs($user)->from(route('products.show', $product))
+        ->post(route('products.orders.store', $product), [
+            ...$payload,
+            'submission_token' => fake()->uuid(),
+        ])
         ->assertRedirect(route('products.show', $product))
         ->assertSessionHasErrors('coupon_code');
 
-    $this->post(route('products.orders.store', $product), [
+    $otherUser = User::factory()->create(['email' => 'customer-lain@example.com']);
+
+    $this->actingAs($otherUser)->post(route('products.orders.store', $product), [
         ...$payload,
-        'customer_email' => 'customer-lain@example.com',
+        'customer_email' => $otherUser->email,
+        'submission_token' => fake()->uuid(),
     ])->assertRedirect();
 
     expect(Order::query()->count())->toBe(2);
@@ -240,24 +255,29 @@ test('expires a coupon after the final second of its Malaysia expiry date', func
         'code' => 'LASTDAY',
         'expires_at' => Carbon::create(2026, 9, 12, 23, 59, 59, 'Asia/Kuala_Lumpur')->utc(),
     ]);
+    $user = User::factory()->create(['email' => 'aina@example.com']);
     $payload = [
         'customer_name' => 'Aina Ahmad',
         'customer_email' => 'aina@example.com',
         'customer_phone' => '0123456789',
         'quantity' => 1,
         'coupon_code' => $coupon->code,
+        'submission_token' => fake()->uuid(),
     ];
 
     fakeStripeCheckout();
 
     $this->travelTo(Carbon::create(2026, 9, 12, 23, 59, 59, 'Asia/Kuala_Lumpur'));
-    $this->post(route('products.orders.store', $product), $payload)->assertRedirect();
+    $this->actingAs($user)->post(route('products.orders.store', $product), $payload)->assertRedirect();
 
     $this->travelTo(Carbon::create(2026, 9, 13, 0, 0, 0, 'Asia/Kuala_Lumpur'));
-    $this->from(route('products.show', $product))
+    $otherUser = User::factory()->create(['email' => 'lain@example.com']);
+
+    $this->actingAs($otherUser)->from(route('products.show', $product))
         ->post(route('products.orders.store', $product), [
             ...$payload,
-            'customer_email' => 'lain@example.com',
+            'customer_email' => $otherUser->email,
+            'submission_token' => fake()->uuid(),
         ])
         ->assertRedirect(route('products.show', $product))
         ->assertSessionHasErrors('coupon_code');
@@ -269,7 +289,9 @@ test('rejects an incomplete order form', function () {
     $product = Product::factory()->create();
 
     $response = $this->from(route('products.show', $product))
-        ->post(route('products.orders.store', $product), []);
+        ->post(route('products.orders.store', $product), [
+            'submission_token' => fake()->uuid(),
+        ]);
 
     $response
         ->assertRedirect(route('products.show', $product))
@@ -290,7 +312,123 @@ test('returns 404 when an unpublished product is ordered', function () {
         'customer_email' => 'aina@example.com',
         'customer_phone' => '0123456789',
         'quantity' => 1,
+        'submission_token' => fake()->uuid(),
     ])->assertNotFound();
 
     expect(Order::query()->count())->toBe(0);
+});
+
+test('limits order submissions from one IP even when each request uses a different email', function () {
+    $product = Product::factory()->create();
+
+    fakeStripeCheckout();
+
+    $this->withServerVariables(['REMOTE_ADDR' => '203.0.113.10']);
+
+    foreach (range(1, 10) as $attempt) {
+        $this->post(route('products.orders.store', $product), [
+            'customer_name' => 'Aina Ahmad',
+            'customer_email' => "aina-{$attempt}@example.com",
+            'customer_phone' => '0123456789',
+            'quantity' => 1,
+            'submission_token' => fake()->uuid(),
+        ])->assertRedirect();
+    }
+
+    $this->post(route('products.orders.store', $product), [
+        'customer_name' => 'Aina Ahmad',
+        'customer_email' => 'aina-11@example.com',
+        'customer_phone' => '0123456789',
+        'quantity' => 1,
+        'submission_token' => fake()->uuid(),
+    ])->assertTooManyRequests();
+
+    expect(Order::query()->count())->toBe(10);
+});
+
+test('requires a verified account email to use a coupon', function () {
+    $product = Product::factory()->create();
+    $coupon = Coupon::factory()->create();
+    $user = User::factory()->unverified()->create(['email' => 'aina@example.com']);
+
+    fakeStripeCheckout();
+
+    $this->actingAs($user)
+        ->from(route('products.show', $product))
+        ->post(route('products.orders.store', $product), [
+            'customer_name' => 'Aina Ahmad',
+            'customer_email' => $user->email,
+            'customer_phone' => '0123456789',
+            'quantity' => 1,
+            'coupon_code' => $coupon->code,
+            'submission_token' => fake()->uuid(),
+        ])
+        ->assertRedirect(route('products.show', $product))
+        ->assertSessionHasErrors([
+            'coupon_code' => 'Sila log masuk dengan e-mel yang telah disahkan untuk menggunakan kupon.',
+        ]);
+
+    expect(Order::query()->count())->toBe(0);
+});
+
+test('rejects a coupon order when the supplied email differs from the verified account email', function () {
+    $product = Product::factory()->create();
+    $coupon = Coupon::factory()->create();
+    $user = User::factory()->create(['email' => 'aina@example.com']);
+
+    fakeStripeCheckout();
+
+    $this->actingAs($user)
+        ->from(route('products.show', $product))
+        ->post(route('products.orders.store', $product), [
+            'customer_name' => 'Aina Ahmad',
+            'customer_email' => 'mangsa@example.com',
+            'customer_phone' => '0123456789',
+            'quantity' => 1,
+            'coupon_code' => $coupon->code,
+            'submission_token' => fake()->uuid(),
+        ])
+        ->assertRedirect(route('products.show', $product))
+        ->assertSessionHasErrors([
+            'customer_email' => 'E-mel tempahan mesti sepadan dengan e-mel akaun yang telah disahkan untuk menggunakan kupon.',
+        ]);
+
+    expect(Order::query()->count())->toBe(0);
+});
+
+test('rejects an order submitted without a submission token', function () {
+    $product = Product::factory()->create();
+
+    $this->from(route('products.show', $product))
+        ->post(route('products.orders.store', $product), [
+            'customer_name' => 'Aina Ahmad',
+            'customer_email' => 'aina@example.com',
+            'customer_phone' => '0123456789',
+            'quantity' => 1,
+        ])
+        ->assertRedirect(route('products.show', $product))
+        ->assertSessionHasErrors('submission_token');
+
+    expect(Order::query()->count())->toBe(0);
+});
+
+test('creates one order when the same submission token is sent twice', function () {
+    $product = Product::factory()->create();
+    $submissionToken = '18fe6be7-116d-45c3-a726-1ca685012f77';
+
+    fakeStripeCheckout();
+
+    $payload = [
+        'customer_name' => 'Aina Ahmad',
+        'customer_email' => 'aina@example.com',
+        'customer_phone' => '0123456789',
+        'quantity' => 1,
+        'submission_token' => $submissionToken,
+    ];
+
+    $this->post(route('products.orders.store', $product), $payload)->assertRedirect();
+    $this->post(route('products.orders.store', $product), $payload)->assertRedirect();
+
+    expect(Order::query()->count())->toBe(1);
+    Mail::assertSentTimes(OrderSubmitted::class, 1);
 });
