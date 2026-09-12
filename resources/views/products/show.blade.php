@@ -37,6 +37,12 @@
                     <form id="order-form" method="POST" action="{{ route('products.orders.store', $product) }}" data-coupon-preview-url="{{ route('products.coupons.preview', $product) }}" data-unit-price="{{ $product->price }}" class="grid gap-5 p-6 sm:p-7">
                         @csrf
 
+                        @if (session('payment_error'))
+                            <p class="rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-3 text-sm text-amber-800">{{ session('payment_error') }}</p>
+                        @endif
+
+                        @error('payment')<p class="rounded-xl border border-red-200 bg-red-50 px-3.5 py-3 text-sm text-red-700">{{ $message }}</p>@enderror
+
                         <div>
                             <label for="customer_name" class="mb-2 block text-sm font-semibold text-slate-700">Nama</label>
                             <input id="customer_name" name="customer_name" value="{{ old('customer_name') }}" required autocomplete="name" class="block w-full rounded-xl border-slate-200 bg-white px-3.5 py-3 text-slate-900 shadow-sm placeholder:text-slate-400 focus:border-indigo-500 focus:ring-indigo-500">
@@ -95,8 +101,8 @@
                             @error('customer_note')<p class="mt-1.5 text-sm text-red-600">{{ $message }}</p>@enderror
                         </div>
 
-                        <button type="submit" class="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-3.5 text-sm font-bold text-white shadow-lg shadow-indigo-200 transition hover:-translate-y-0.5 hover:bg-indigo-700 hover:shadow-indigo-300">Hantar tempahan <span aria-hidden="true">→</span></button>
-                        <p class="text-center text-xs leading-5 text-slate-500">Maklumat anda hanya digunakan untuk menguruskan tempahan ini.</p>
+                        <button type="submit" class="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-3.5 text-sm font-bold text-white shadow-lg shadow-indigo-200 transition hover:-translate-y-0.5 hover:bg-indigo-700 hover:shadow-indigo-300">Teruskan ke pembayaran selamat <span aria-hidden="true">→</span></button>
+                        <p class="text-center text-xs leading-5 text-slate-500">Maklumat anda hanya digunakan untuk menguruskan tempahan dan pembayaran ini.</p>
                     </form>
                 </div>
             </aside>

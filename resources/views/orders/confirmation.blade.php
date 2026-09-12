@@ -5,9 +5,14 @@
                 <span class="mx-auto grid size-16 place-items-center rounded-full bg-emerald-100 text-emerald-600 ring-8 ring-emerald-50">
                     <svg viewBox="0 0 24 24" class="size-8" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.3" aria-hidden="true"><path d="m5 12 4 4L19 6"/></svg>
                 </span>
-                <p class="mt-7 text-xs font-bold tracking-[0.18em] text-indigo-600 uppercase">Tempahan diterima</p>
-                <h1 class="mt-3 text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">Terima kasih atas tempahan anda.</h1>
-                <p class="mx-auto mt-4 max-w-xl leading-7 text-slate-600">Kami sedang menyemak tempahan ini dan akan menghubungi anda untuk proses penyerahan produk digital.</p>
+                <p class="mt-7 text-xs font-bold tracking-[0.18em] text-indigo-600 uppercase">Status pembayaran</p>
+                @if ($order->hasConfirmedPayment())
+                    <h1 class="mt-3 text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">Bayaran anda telah disahkan.</h1>
+                    <p class="mx-auto mt-4 max-w-xl leading-7 text-slate-600">Terima kasih. Kami akan menyemak tempahan ini dan menghubungi anda untuk proses penyerahan produk digital.</p>
+                @else
+                    <h1 class="mt-3 text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">Kami sedang mengesahkan pembayaran anda.</h1>
+                    <p class="mx-auto mt-4 max-w-xl leading-7 text-slate-600">Sila tunggu sebentar. Status bayaran dikemas kini hanya selepas pengesahan daripada Stripe.</p>
+                @endif
             </div>
 
             <div class="px-6 pb-9 sm:px-12 sm:pb-12">
@@ -19,6 +24,10 @@
                     <div class="bg-white p-5">
                         <dt class="text-sm font-medium text-slate-500">Produk</dt>
                         <dd class="mt-1.5 font-bold text-slate-950">{{ $order->product_name }}</dd>
+                    </div>
+                    <div class="bg-white p-5">
+                        <dt class="text-sm font-medium text-slate-500">Pembayaran</dt>
+                        <dd class="mt-1.5 font-bold text-slate-950">{{ $order->payment_status->label() }}</dd>
                     </div>
                     <div class="bg-white p-5">
                         <dt class="text-sm font-medium text-slate-500">Subtotal</dt>

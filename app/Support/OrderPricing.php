@@ -14,7 +14,7 @@ class OrderPricing
      */
     public function quote(Product $product, int $quantity, ?Coupon $coupon = null): array
     {
-        $subtotalInSen = $this->toSen($product->price) * $quantity;
+        $subtotalInSen = $this->amountInSen($product->price) * $quantity;
         $discountInSen = $coupon?->discountInSen($subtotalInSen) ?? 0;
 
         return [
@@ -27,9 +27,9 @@ class OrderPricing
     /**
      * Convert a two-decimal currency amount into sen.
      */
-    private function toSen(string $amount): int
+    public function amountInSen(string|float $amount): int
     {
-        [$whole, $fraction] = array_pad(explode('.', $amount, 2), 2, '');
+        [$whole, $fraction] = array_pad(explode('.', (string) $amount, 2), 2, '');
 
         return ((int) $whole * 100) + (int) str_pad(substr($fraction, 0, 2), 2, '0');
     }

@@ -5,6 +5,7 @@ namespace Database\Factories;
 use App\Models\Order;
 use App\Models\Product;
 use App\OrderStatus;
+use App\PaymentStatus;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -34,6 +35,7 @@ class OrderFactory extends Factory
             'customer_phone' => fake()->phoneNumber(),
             'customer_note' => fake()->optional()->sentence(),
             'status' => OrderStatus::New,
+            'payment_status' => PaymentStatus::Pending,
         ];
     }
 }

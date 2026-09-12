@@ -25,6 +25,14 @@ new #[Title('Detail tempahan')] class extends Component {
      */
     public function updateStatus(): void
     {
+        $this->order->refresh();
+
+        if (! $this->order->hasConfirmedPayment()) {
+            $this->addError('status', 'Bayaran perlu disahkan sebelum tempahan diproses.');
+
+            return;
+        }
+
         $validated = $this->validate([
             'status' => ['required', Rule::enum(OrderStatus::class)],
         ]);
@@ -80,6 +88,34 @@ new #[Title('Detail tempahan')] class extends Component {
             </flux:card>
 
             <flux:card>
+                <flux:heading size="lg">Pembayaran</flux:heading>
+                <dl class="mt-5 grid gap-4 sm:grid-cols-2">
+                    <div>
+                        <dt class="text-sm text-zinc-500 dark:text-zinc-400">Status bayaran</dt>
+                        <dd class="mt-1"><flux:badge size="sm">{{ $order->payment_status->label() }}</flux:badge></dd>
+                    </div>
+                    @if ($order->paid_at)
+                        <div>
+                            <dt class="text-sm text-zinc-500 dark:text-zinc-400">Dibayar pada</dt>
+                            <dd class="mt-1 font-medium">{{ $order->paid_at->format('d/m/Y H:i') }}</dd>
+                        </div>
+                    @endif
+                    @if ($order->stripe_checkout_session_id)
+                        <div class="sm:col-span-2">
+                            <dt class="text-sm text-zinc-500 dark:text-zinc-400">Stripe Checkout Session</dt>
+                            <dd class="mt-1 break-all font-mono text-sm">{{ $order->stripe_checkout_session_id }}</dd>
+                        </div>
+                    @endif
+                    @if ($order->stripe_payment_intent_id)
+                        <div class="sm:col-span-2">
+                            <dt class="text-sm text-zinc-500 dark:text-zinc-400">Stripe PaymentIntent</dt>
+                            <dd class="mt-1 break-all font-mono text-sm">{{ $order->stripe_payment_intent_id }}</dd>
+                        </div>
+                    @endif
+                </dl>
+            </flux:card>
+
+            <flux:card>
                 <flux:heading size="lg">Maklumat pelanggan</flux:heading>
                 <dl class="mt-5 grid gap-4 sm:grid-cols-2">
                     <div>
@@ -109,13 +145,14 @@ new #[Title('Detail tempahan')] class extends Component {
                     <flux:text class="mt-1">Kemas kini selepas menyemak atau menyerahkan produk digital.</flux:text>
                 </div>
 
-                <flux:select wire:model="status" :label="__('Status')">
+                <flux:select wire:model="status" :label="__('Status')" :disabled="! $order->hasConfirmedPayment()">
                     @foreach (OrderStatus::cases() as $orderStatus)
                         <option value="{{ $orderStatus->value }}">{{ $orderStatus->label() }}</option>
                     @endforeach
                 </flux:select>
 
-                <flux:button type="submit" variant="primary">Simpan status</flux:button>
+                <flux:error name="status" />
+                <flux:button type="submit" variant="primary" :disabled="! $order->hasConfirmedPayment()">Simpan status</flux:button>
             </form>
         </flux:card>
     </div>

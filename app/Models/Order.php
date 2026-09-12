@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\OrderStatus;
+use App\PaymentStatus;
 use Database\Factories\OrderFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -25,11 +26,24 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
     'customer_phone',
     'customer_note',
     'status',
+    'payment_status',
+    'stripe_checkout_session_id',
+    'stripe_payment_intent_id',
+    'paid_at',
 ])]
 class Order extends Model
 {
     /** @use HasFactory<OrderFactory> */
     use HasFactory;
+
+    /**
+     * The model's default values for attributes.
+     *
+     * @var array<string, mixed>
+     */
+    protected $attributes = [
+        'payment_status' => PaymentStatus::Pending->value,
+    ];
 
     /**
      * Get the product ordered by the customer.
@@ -70,6 +84,14 @@ class Order extends Model
     }
 
     /**
+     * Determine whether the order can be fulfilled.
+     */
+    public function hasConfirmedPayment(): bool
+    {
+        return $this->getRawOriginal('payment_status') === PaymentStatus::Paid->value;
+    }
+
+    /**
      * Get the attributes that should be cast.
      *
      * @return array<string, string>
@@ -78,9 +100,11 @@ class Order extends Model
     {
         return [
             'status' => OrderStatus::class,
+            'payment_status' => PaymentStatus::class,
             'unit_price' => 'decimal:2',
             'discount_amount' => 'decimal:2',
             'total_price' => 'decimal:2',
+            'paid_at' => 'datetime',
         ];
     }
 }

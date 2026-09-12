@@ -2,6 +2,7 @@
 
 use App\Models\Order;
 use App\OrderStatus;
+use App\PaymentStatus;
 use Flux\Flux;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Validation\Rule;
@@ -60,6 +61,12 @@ new #[Title('Tempahan')] class extends Component {
      */
     public function updateStatus(Order $order, string $status): void
     {
+        if (! $order->hasConfirmedPayment()) {
+            $this->addError('status', 'Bayaran perlu disahkan sebelum tempahan diproses.');
+
+            return;
+        }
+
         validator(
             ['status' => $status],
             ['status' => ['required', Rule::enum(OrderStatus::class)]],
@@ -95,6 +102,7 @@ new #[Title('Tempahan')] class extends Component {
                     <flux:table.column>Produk</flux:table.column>
                     <flux:table.column>Pelanggan</flux:table.column>
                     <flux:table.column>Jumlah</flux:table.column>
+                    <flux:table.column>Pembayaran</flux:table.column>
                     <flux:table.column>Status</flux:table.column>
                     <flux:table.column align="end">Tindakan</flux:table.column>
                 </flux:table.columns>
@@ -121,9 +129,13 @@ new #[Title('Tempahan')] class extends Component {
                                 @endif
                             </flux:table.cell>
                             <flux:table.cell>
+                                <flux:badge size="sm">{{ $order->payment_status->label() }}</flux:badge>
+                            </flux:table.cell>
+                            <flux:table.cell>
                                 <select
                                     wire:change="updateStatus('{{ $order->reference }}', $event.target.value)"
-                                    class="rounded-md border-zinc-300 bg-white text-sm text-zinc-900 shadow-sm dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
+                                    @disabled(! $order->hasConfirmedPayment())
+                                    class="rounded-md border-zinc-300 bg-white text-sm text-zinc-900 shadow-sm disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100"
                                 >
                                     @foreach (OrderStatus::cases() as $orderStatus)
                                         <option value="{{ $orderStatus->value }}" @selected($order->status === $orderStatus)>{{ $orderStatus->label() }}</option>
@@ -136,10 +148,11 @@ new #[Title('Tempahan')] class extends Component {
                         </flux:table.row>
                     @empty
                         <flux:table.row>
-                            <flux:table.cell colspan="6">Tiada tempahan sepadan.</flux:table.cell>
+                            <flux:table.cell colspan="7">Tiada tempahan sepadan.</flux:table.cell>
                         </flux:table.row>
                     @endforelse
                 </flux:table.rows>
             </flux:table>
+            <flux:error name="status" class="mt-4" />
         </flux:card>
 </div>

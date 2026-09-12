@@ -1,7 +1,9 @@
 <?php
 
 use App\Http\Controllers\CatalogController;
+use App\Http\Controllers\OrderPaymentController;
 use App\Http\Controllers\ProductOrderController;
+use App\Http\Controllers\StripeWebhookController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', [CatalogController::class, 'index'])->name('home');
@@ -15,6 +17,11 @@ Route::post('products/{product}/orders', [ProductOrderController::class, 'store'
     ->name('products.orders.store');
 Route::get('orders/{order}/confirmation', [ProductOrderController::class, 'confirmation'])
     ->name('orders.confirmation');
+Route::get('orders/{order}/payment/cancel', [OrderPaymentController::class, 'cancel'])
+    ->middleware('signed')
+    ->name('orders.payment.cancel');
+Route::post('stripe/webhook', [StripeWebhookController::class, 'store'])
+    ->name('stripe.webhook');
 
 Route::middleware(['auth', 'verified', 'admin'])->group(function () {
     Route::redirect('dashboard', '/admin')->name('dashboard');

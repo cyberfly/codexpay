@@ -7,6 +7,7 @@ use App\Models\Order;
 use App\Models\Product;
 use App\Models\User;
 use App\OrderStatus;
+use App\PaymentStatus;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
@@ -172,9 +173,9 @@ test('sanitizes rich-text product descriptions created by an admin', function ()
         ->not->toContain('<script>');
 });
 
-test('allows an admin to update an order status', function () {
+test('allows an admin to update the fulfilment status of a paid order', function () {
     $admin = User::factory()->admin()->create();
-    $order = Order::factory()->create();
+    $order = Order::factory()->create(['payment_status' => PaymentStatus::Paid]);
     $this->actingAs($admin);
 
     Livewire::test('pages::admin.orders')
@@ -184,23 +185,43 @@ test('allows an admin to update an order status', function () {
     expect($order->fresh()->status)->toBe(OrderStatus::Completed);
 });
 
+test('prevents an admin from updating the fulfilment status of an unpaid order', function () {
+    $admin = User::factory()->admin()->create();
+    $order = Order::factory()->create(['payment_status' => PaymentStatus::Pending]);
+    $this->actingAs($admin);
+
+    Livewire::test('pages::admin.orders')
+        ->call('updateStatus', $order->reference, OrderStatus::Completed->value)
+        ->assertHasErrors(['status']);
+
+    expect($order->fresh()->status)->toBe(OrderStatus::New);
+});
+
 test('renders an order detail page for an admin', function () {
     $admin = User::factory()->admin()->create();
     $order = Order::factory()->create([
         'customer_name' => 'Aina Ahmad',
         'customer_note' => 'Hantar melalui e-mel.',
+        'payment_status' => PaymentStatus::Paid,
+        'stripe_checkout_session_id' => 'cs_test_123',
+        'stripe_payment_intent_id' => 'pi_test_123',
+        'paid_at' => now(),
     ]);
     $this->actingAs($admin);
 
     $this->get(route('admin.orders.show', $order))
         ->assertSee($order->reference)
         ->assertSee('Aina Ahmad')
-        ->assertSee('Hantar melalui e-mel.');
+        ->assertSee('Hantar melalui e-mel.')
+        ->assertSee('Stripe Checkout Session')
+        ->assertSee('cs_test_123')
+        ->assertSee('Stripe PaymentIntent')
+        ->assertSee('pi_test_123');
 });
 
-test('allows an admin to update an order status from its detail page', function () {
+test('allows an admin to update the fulfilment status of a paid order from its detail page', function () {
     $admin = User::factory()->admin()->create();
-    $order = Order::factory()->create();
+    $order = Order::factory()->create(['payment_status' => PaymentStatus::Paid]);
     $this->actingAs($admin);
 
     Livewire::test('pages::admin.order', ['order' => $order])
@@ -211,16 +232,18 @@ test('allows an admin to update an order status from its detail page', function 
     expect($order->fresh()->status)->toBe(OrderStatus::Processing);
 });
 
-test('renders a sales chart that excludes cancelled orders', function () {
+test('renders a sales chart that only includes paid orders', function () {
     $admin = User::factory()->admin()->create();
     Order::factory()->create([
         'total_price' => '50.00',
         'status' => OrderStatus::Completed,
+        'payment_status' => PaymentStatus::Paid,
         'created_at' => today(),
     ]);
     Order::factory()->create([
         'total_price' => '100.00',
         'status' => OrderStatus::Cancelled,
+        'payment_status' => PaymentStatus::Pending,
         'created_at' => today(),
     ]);
     $this->actingAs($admin);

@@ -2,6 +2,7 @@
 
 use App\Models\Order;
 use App\OrderStatus;
+use App\PaymentStatus;
 use Carbon\CarbonInterface;
 use Livewire\Attributes\Computed;
 use Livewire\Attributes\Title;
@@ -43,7 +44,7 @@ new #[Title('Admin dashboard')] class extends Component {
     {
         $startDate = today()->subDays(29);
         $salesByDate = Order::query()
-            ->where('status', '!=', OrderStatus::Cancelled->value)
+            ->where('payment_status', PaymentStatus::Paid->value)
             ->where('created_at', '>=', $startDate)
             ->selectRaw('date(created_at) as date, sum(total_price) as total')
             ->groupBy('date')
@@ -79,7 +80,7 @@ new #[Title('Admin dashboard')] class extends Component {
     <flux:card>
         <div class="mb-6">
             <flux:heading size="lg">Jualan 30 hari terakhir</flux:heading>
-            <flux:text class="mt-1">Jumlah tempahan yang belum dibatalkan, dalam RM.</flux:text>
+            <flux:text class="mt-1">Jumlah bayaran yang telah disahkan, dalam RM.</flux:text>
         </div>
 
         <div

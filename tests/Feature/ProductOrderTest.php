@@ -1,18 +1,44 @@
 <?php
 
 use App\DiscountType;
+use App\Mail\AdminOrderSubmitted;
+use App\Mail\OrderSubmitted;
 use App\Models\Coupon;
 use App\Models\CouponRedemption;
 use App\Models\Order;
 use App\Models\Product;
+use App\Models\User;
 use App\OrderStatus;
+use App\PaymentStatus;
+use App\Support\StripeCheckout;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Mail;
+
+use function Pest\Laravel\mock;
+
+function fakeStripeCheckout(): void
+{
+    Mail::fake();
+
+    mock(StripeCheckout::class)
+        ->shouldReceive('createCheckoutSession')
+        ->zeroOrMoreTimes()
+        ->andReturn('https://checkout.stripe.test/session');
+}
 
 test('creates a direct guest order for a published product', function () {
     $product = Product::factory()->create([
         'name' => 'Panduan Automasi',
         'price' => '19.95',
     ]);
+    $administrator = User::factory()->admin()->create([
+        'email' => 'admin@example.com',
+    ]);
+    User::factory()->create([
+        'email' => 'not-admin@example.com',
+    ]);
+
+    fakeStripeCheckout();
 
     $response = $this->post(route('products.orders.store', $product), [
         'customer_name' => 'Aina Ahmad',
@@ -24,7 +50,7 @@ test('creates a direct guest order for a published product', function () {
 
     $order = Order::query()->firstOrFail();
 
-    $response->assertRedirectToRoute('orders.confirmation', $order);
+    $response->assertRedirect('https://checkout.stripe.test/session');
     $this->assertDatabaseHas('orders', [
         'product_id' => $product->id,
         'product_name' => 'Panduan Automasi',
@@ -36,6 +62,18 @@ test('creates a direct guest order for a published product', function () {
     expect($order->unit_price)->toBe('19.95');
     expect($order->total_price)->toBe('39.90');
     expect($order->status)->toBe(OrderStatus::New);
+    expect($order->payment_status)->toBe(PaymentStatus::Pending);
+    Mail::assertSent(OrderSubmitted::class, function (OrderSubmitted $mail) use ($order): bool {
+        return $mail->hasTo('aina@example.com')
+            && $mail->order->is($order)
+            && $mail->hasSubject('Tempahan diterima: '.$order->reference);
+    });
+    Mail::assertSent(AdminOrderSubmitted::class, function (AdminOrderSubmitted $mail) use ($administrator, $order): bool {
+        return $mail->hasTo($administrator->email)
+            && $mail->order->is($order)
+            && $mail->hasSubject('Tempahan baharu: '.$order->reference);
+    });
+    Mail::assertSentTimes(AdminOrderSubmitted::class, 1);
 });
 
 test('applies a percentage coupon and records its redemption', function () {
@@ -45,6 +83,8 @@ test('applies a percentage coupon and records its redemption', function () {
         'discount_type' => DiscountType::Percentage,
         'discount_value' => '10.00',
     ]);
+
+    fakeStripeCheckout();
 
     $response = $this->post(route('products.orders.store', $product), [
         'customer_name' => 'Aina Ahmad',
@@ -56,7 +96,7 @@ test('applies a percentage coupon and records its redemption', function () {
 
     $order = Order::query()->firstOrFail();
 
-    $response->assertRedirectToRoute('orders.confirmation', $order);
+    $response->assertRedirect('https://checkout.stripe.test/session');
     expect($order->coupon_id)->toBe($coupon->id);
     expect($order->coupon_code)->toBe('SAVE10');
     expect($order->discount_amount)->toBe('3.99');
@@ -121,6 +161,8 @@ test('caps a fixed coupon discount at the order subtotal', function () {
         'discount_value' => '50.00',
     ]);
 
+    fakeStripeCheckout();
+
     $this->post(route('products.orders.store', $product), [
         'customer_name' => 'Aina Ahmad',
         'customer_email' => 'aina@example.com',
@@ -162,7 +204,7 @@ test('rejects an inactive, expired, or product-ineligible coupon', function () {
     expect(Order::query()->count())->toBe(0);
 });
 
-test('locks a coupon to an email even after its order is cancelled', function () {
+test('locks a coupon to an email after its order is paid', function () {
     $product = Product::factory()->create();
     $coupon = Coupon::factory()->create(['code' => 'ONEEMAIL']);
     $payload = [
@@ -173,8 +215,10 @@ test('locks a coupon to an email even after its order is cancelled', function ()
         'coupon_code' => $coupon->code,
     ];
 
+    fakeStripeCheckout();
+
     $this->post(route('products.orders.store', $product), $payload)->assertRedirect();
-    Order::query()->firstOrFail()->update(['status' => OrderStatus::Cancelled]);
+    Order::query()->firstOrFail()->update(['payment_status' => PaymentStatus::Paid]);
 
     $this->from(route('products.show', $product))
         ->post(route('products.orders.store', $product), $payload)
@@ -203,6 +247,8 @@ test('expires a coupon after the final second of its Malaysia expiry date', func
         'quantity' => 1,
         'coupon_code' => $coupon->code,
     ];
+
+    fakeStripeCheckout();
 
     $this->travelTo(Carbon::create(2026, 9, 12, 23, 59, 59, 'Asia/Kuala_Lumpur'));
     $this->post(route('products.orders.store', $product), $payload)->assertRedirect();
